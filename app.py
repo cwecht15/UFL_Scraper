@@ -15,6 +15,7 @@ from fetch_google_sheet_range import (
 )
 from scrape_foxsports_ufl_pbp import (
     AMBIGUITY_REPORT_HEADERS,
+    DEFAULT_ROSTER,
     DEFAULT_TEMPLATE,
     csv_text,
     default_output_path,
@@ -57,6 +58,25 @@ def app_css() -> None:
             margin: 0;
             color: #44503b;
             font-size: 1rem;
+        }
+        [data-testid="stSidebar"] {
+            background: #23242c;
+        }
+        [data-testid="stSidebar"] * {
+            color: #f4f2ed !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] li,
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] .stSubheader,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] div {
+            color: #f4f2ed !important;
+        }
+        [data-testid="stSidebar"] .note-card {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fffaf2 !important;
         }
         h1, h2, h3, h4, h5, h6,
         p, li, label, span, div {
@@ -122,6 +142,20 @@ def validate_inputs() -> list[str]:
 def google_service_account_info() -> dict[str, str] | None:
     if "google_service_account" in st.secrets:
         return dict(st.secrets["google_service_account"])
+    required_keys = {
+        "type",
+        "project_id",
+        "private_key_id",
+        "private_key",
+        "client_email",
+        "client_id",
+        "auth_uri",
+        "token_uri",
+        "auth_provider_x509_cert_url",
+        "client_x509_cert_url",
+    }
+    if required_keys.issubset(set(st.secrets.keys())):
+        return {key: st.secrets[key] for key in required_keys}
     if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
         return json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
     return None
@@ -138,6 +172,19 @@ def write_temp_roster(credentials_info: dict[str, str] | None) -> Path:
     with handle:
         handle.write(roster_csv)
     return Path(handle.name)
+
+
+def resolve_roster_source(credentials_info: dict[str, str] | None) -> tuple[Path, str, str | None]:
+    if credentials_info is not None:
+        try:
+            return write_temp_roster(credentials_info), "live_google_sheet", None
+        except Exception as exc:  # noqa: BLE001
+            if DEFAULT_ROSTER.exists():
+                return DEFAULT_ROSTER, "bundled_fallback", str(exc)
+            raise
+    if DEFAULT_ROSTER.exists():
+        return DEFAULT_ROSTER, "bundled_fallback", "Live roster refresh is not configured."
+    raise RuntimeError("No roster source is available. Configure Google Sheets access or add roster_info.csv.")
 
 
 def main() -> None:
@@ -160,11 +207,6 @@ def main() -> None:
         st.stop()
 
     credentials_info = google_service_account_info()
-    if credentials_info is None:
-        st.warning(
-            "Live roster refresh is not configured. Add a `google_service_account` secret in Streamlit Cloud "
-            "or set `GOOGLE_SERVICE_ACCOUNT_JSON` locally so each run pulls a fresh roster."
-        )
 
     with st.sidebar:
         st.subheader("What You Get")
@@ -173,7 +215,7 @@ def main() -> None:
             - Play-by-play CSV in the sample schema
             - Ambiguity report for short-name collisions
             - Missing-target warnings for thrown passes
-            - Fresh Google Sheets roster pull on each run
+            - Live Google Sheets roster refresh when configured
             """
         )
         st.markdown('<div class="note-card">Built for Fox Sports UFL game pages with the play-by-play tab.</div>', unsafe_allow_html=True)
@@ -195,9 +237,11 @@ def main() -> None:
         return
 
     roster_path: Path | None = None
+    roster_source = ""
+    roster_warning: str | None = None
     try:
         with st.spinner("Scraping Fox Sports play-by-play and building exports..."):
-            roster_path = write_temp_roster(credentials_info)
+            roster_path, roster_source, roster_warning = resolve_roster_source(credentials_info)
             headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, roster_path)
             pbp_csv = csv_text(headers, rows)
             ambiguity_csv = csv_text(AMBIGUITY_REPORT_HEADERS, ambiguity_rows)
@@ -205,11 +249,16 @@ def main() -> None:
         st.error(f"Could not generate outputs: {exc}")
         return
     finally:
-        if roster_path and roster_path.exists():
+        if roster_source == "live_google_sheet" and roster_path and roster_path.exists():
             roster_path.unlink(missing_ok=True)
 
     output_name = default_output_path(game_url.strip())
     ambiguity_name = output_name.with_name(f"{output_name.stem}_ambiguity_report.csv")
+
+    if roster_source == "live_google_sheet":
+        st.success("Used a fresh roster pull from Google Sheets for this run.")
+    elif roster_warning:
+        st.warning(f"Used bundled roster snapshot instead of a live refresh. Reason: {roster_warning}")
 
     stats = st.columns(3)
     stats[0].metric("Rows", max(len(rows) - 1, 0))
