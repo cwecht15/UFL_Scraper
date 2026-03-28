@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+
+foxsports_game_87*.csv
