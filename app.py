@@ -114,6 +114,19 @@ def app_css() -> None:
         }
         [data-testid="stDownloadButton"] button {
             border-radius: 14px;
+            background: #171923 !important;
+            color: #fffaf2 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            font-weight: 600;
+        }
+        [data-testid="stDownloadButton"] button p,
+        [data-testid="stDownloadButton"] button span,
+        [data-testid="stDownloadButton"] button div {
+            color: #fffaf2 !important;
+        }
+        [data-testid="stDownloadButton"] button:hover {
+            background: #222532 !important;
+            color: #ffffff !important;
         }
         .stDataFrame,
         [data-testid="stDataFrame"] {
@@ -175,16 +188,13 @@ def write_temp_roster(credentials_info: dict[str, str] | None) -> Path:
 
 
 def resolve_roster_source(credentials_info: dict[str, str] | None) -> tuple[Path, str, str | None]:
-    if credentials_info is not None:
-        try:
-            return write_temp_roster(credentials_info), "live_google_sheet", None
-        except Exception as exc:  # noqa: BLE001
-            if DEFAULT_ROSTER.exists():
-                return DEFAULT_ROSTER, "bundled_fallback", str(exc)
-            raise
-    if DEFAULT_ROSTER.exists():
-        return DEFAULT_ROSTER, "bundled_fallback", "Live roster refresh is not configured."
-    raise RuntimeError("No roster source is available. Configure Google Sheets access or add roster_info.csv.")
+    try:
+        return write_temp_roster(credentials_info), "live_google_sheet", None
+    except Exception as exc:  # noqa: BLE001
+        if DEFAULT_ROSTER.exists():
+            return DEFAULT_ROSTER, "bundled_fallback", str(exc)
+        raise
+    raise RuntimeError("No roster source is available. Check the public Google Sheet or add roster_info.csv.")
 
 
 def main() -> None:
@@ -215,7 +225,7 @@ def main() -> None:
             - Play-by-play CSV in the sample schema
             - Ambiguity report for short-name collisions
             - Missing-target warnings for thrown passes
-            - Live Google Sheets roster refresh when configured
+            - Live Google Sheets roster refresh on each run
             """
         )
         st.markdown('<div class="note-card">Built for Fox Sports UFL game pages with the play-by-play tab.</div>', unsafe_allow_html=True)
