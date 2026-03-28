@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 
 import streamlit as st
@@ -187,6 +188,72 @@ def write_temp_roster(credentials_info: dict[str, str] | None) -> Path:
     return Path(handle.name)
 
 
+def int_value(value: str) -> int:
+    if value in ("", "#N/A", None):
+        return 0
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def aggregate_player_stats(rows: list[dict[str, str]]) -> tuple[list[dict[str, int | str]], list[dict[str, int | str]], list[dict[str, int | str]]]:
+    passing: dict[str, dict[str, int | str]] = {}
+    rushing: dict[str, dict[str, int | str]] = {}
+    receiving: dict[str, dict[str, int | str]] = {}
+
+    for row in rows:
+        if row.get("play_number") == "0" or row.get("no_play") == "1":
+            continue
+
+        passer = row.get("passer_name") or row.get("passer")
+        if passer and row.get("pass_play") == "1":
+            passing.setdefault(
+                passer,
+                {"player": passer, "att": 0, "cmp": 0, "yds": 0, "td": 0, "int": 0, "sacks": 0},
+            )
+            if row.get("sack") == "1":
+                passing[passer]["sacks"] += 1
+            else:
+                passing[passer]["att"] += 1
+                if row.get("complete") == "1":
+                    passing[passer]["cmp"] += 1
+                passing[passer]["yds"] += int_value(row.get("passing_yards"))
+                if row.get("passing_touchdown") == "1":
+                    passing[passer]["td"] += 1
+                if row.get("intercepted") == "1":
+                    passing[passer]["int"] += 1
+
+        rusher = row.get("runner_name") or row.get("rusher")
+        if rusher and row.get("rush_attempt") == "1":
+            rushing.setdefault(
+                rusher,
+                {"player": rusher, "att": 0, "yds": 0, "td": 0},
+            )
+            rushing[rusher]["att"] += 1
+            rushing[rusher]["yds"] += int_value(row.get("rushing_yards"))
+            if row.get("rushing_touchdown") == "1":
+                rushing[rusher]["td"] += 1
+
+        receiver = row.get("receiver_name") or row.get("receiver")
+        if receiver and row.get("target") == "1":
+            receiving.setdefault(
+                receiver,
+                {"player": receiver, "targets": 0, "rec": 0, "yds": 0, "td": 0},
+            )
+            receiving[receiver]["targets"] += 1
+            if row.get("reception") == "1":
+                receiving[receiver]["rec"] += 1
+                receiving[receiver]["yds"] += int_value(row.get("passing_yards"))
+                if row.get("passing_touchdown") == "1":
+                    receiving[receiver]["td"] += 1
+
+    passing_rows = sorted(passing.values(), key=lambda item: (-int(item["yds"]), str(item["player"])))
+    rushing_rows = sorted(rushing.values(), key=lambda item: (-int(item["yds"]), str(item["player"])))
+    receiving_rows = sorted(receiving.values(), key=lambda item: (-int(item["yds"]), str(item["player"])))
+    return passing_rows, rushing_rows, receiving_rows
+
+
 def resolve_roster_source(credentials_info: dict[str, str] | None) -> tuple[Path, str, str | None]:
     try:
         return write_temp_roster(credentials_info), "live_google_sheet", None
@@ -264,6 +331,7 @@ def main() -> None:
 
     output_name = default_output_path(game_url.strip())
     ambiguity_name = output_name.with_name(f"{output_name.stem}_ambiguity_report.csv")
+    passing_rows, rushing_rows, receiving_rows = aggregate_player_stats(rows)
 
     if roster_source == "live_google_sheet":
         st.success("Used a fresh roster pull from Google Sheets for this run.")
@@ -292,6 +360,27 @@ def main() -> None:
             mime="text/csv",
             use_container_width=True,
         )
+
+    st.subheader("Player Totals")
+    pass_tab, rush_tab, rec_tab = st.tabs(["Passing", "Rushing", "Receiving"])
+
+    with pass_tab:
+        if passing_rows:
+            st.dataframe(passing_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No passing stats found for this game.")
+
+    with rush_tab:
+        if rushing_rows:
+            st.dataframe(rushing_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No rushing stats found for this game.")
+
+    with rec_tab:
+        if receiving_rows:
+            st.dataframe(receiving_rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No receiving stats found for this game.")
 
     st.subheader("Preview")
     st.caption("Top rows from the generated play-by-play export.")
