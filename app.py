@@ -31,8 +31,14 @@ def app_css() -> None:
         <style>
         .stApp {
             background:
-                radial-gradient(circle at top right, rgba(158, 201, 88, 0.18), transparent 32%),
-                linear-gradient(180deg, #f8f4ec 0%, #f2eee5 100%);
+                radial-gradient(circle at top right, rgba(158, 201, 88, 0.10), transparent 28%),
+                radial-gradient(circle at top left, rgba(233, 96, 83, 0.05), transparent 24%),
+                linear-gradient(180deg, #f7f3eb 0%, #efe8dc 100%);
+            color: #18220f;
+        }
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
         }
         .hero {
             padding: 1.2rem 1.4rem;
@@ -51,6 +57,48 @@ def app_css() -> None:
             margin: 0;
             color: #44503b;
             font-size: 1rem;
+        }
+        h1, h2, h3, h4, h5, h6,
+        p, li, label, span, div {
+            color: inherit;
+        }
+        [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMarkdownContainer"] li,
+        [data-testid="stCaptionContainer"] p,
+        [data-testid="stTextInputRootElement"] + div,
+        .stTextInput label p,
+        .stSubheader,
+        .stAlert,
+        .stException,
+        [data-testid="stMetricLabel"] p {
+            color: #24301c !important;
+        }
+        [data-testid="stMetric"] {
+            background: rgba(255, 255, 255, 0.62);
+            border: 1px solid rgba(24, 34, 15, 0.08);
+            border-radius: 16px;
+            padding: 0.9rem 1rem;
+        }
+        [data-testid="stMetricValue"] {
+            color: #18220f !important;
+        }
+        [data-testid="stMetricLabel"] {
+            color: #506047 !important;
+        }
+        [data-testid="stTextInputRootElement"] input {
+            color: #f8f8f6;
+        }
+        [data-testid="stTextInputRootElement"] label,
+        [data-testid="stTextInputRootElement"] p {
+            color: #24301c !important;
+        }
+        [data-testid="stDownloadButton"] button {
+            border-radius: 14px;
+        }
+        .stDataFrame,
+        [data-testid="stDataFrame"] {
+            background: rgba(255, 255, 255, 0.72);
+            border-radius: 16px;
         }
         .note-card {
             padding: 0.9rem 1rem;
