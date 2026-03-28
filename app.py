@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 from pathlib import Path
 
 import streamlit as st
 
+from fetch_google_sheet_range import (
+    ROSTER_RANGE,
+    ROSTER_SHEET_ID,
+    ROSTER_TAB_NAME,
+    fetch_range_csv_text,
+)
 from scrape_foxsports_ufl_pbp import (
     AMBIGUITY_REPORT_HEADERS,
-    DEFAULT_ROSTER,
     DEFAULT_TEMPLATE,
     csv_text,
     default_output_path,
@@ -60,9 +68,28 @@ def validate_inputs() -> list[str]:
     issues: list[str] = []
     if not DEFAULT_TEMPLATE.exists():
         issues.append(f"Missing template file: {DEFAULT_TEMPLATE}")
-    if not DEFAULT_ROSTER.exists():
-        issues.append(f"Missing roster file: {DEFAULT_ROSTER}")
     return issues
+
+
+def google_service_account_info() -> dict[str, str] | None:
+    if "google_service_account" in st.secrets:
+        return dict(st.secrets["google_service_account"])
+    if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
+        return json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+    return None
+
+
+def write_temp_roster(credentials_info: dict[str, str] | None) -> Path:
+    roster_csv = fetch_range_csv_text(
+        ROSTER_SHEET_ID,
+        ROSTER_TAB_NAME,
+        ROSTER_RANGE,
+        credentials_info=credentials_info,
+    )
+    handle = tempfile.NamedTemporaryFile("w", newline="", encoding="utf-8", suffix=".csv", delete=False)
+    with handle:
+        handle.write(roster_csv)
+    return Path(handle.name)
 
 
 def main() -> None:
@@ -84,6 +111,13 @@ def main() -> None:
             st.error(issue)
         st.stop()
 
+    credentials_info = google_service_account_info()
+    if credentials_info is None:
+        st.warning(
+            "Live roster refresh is not configured. Add a `google_service_account` secret in Streamlit Cloud "
+            "or set `GOOGLE_SERVICE_ACCOUNT_JSON` locally so each run pulls a fresh roster."
+        )
+
     with st.sidebar:
         st.subheader("What You Get")
         st.markdown(
@@ -91,7 +125,7 @@ def main() -> None:
             - Play-by-play CSV in the sample schema
             - Ambiguity report for short-name collisions
             - Missing-target warnings for thrown passes
-            - Automatic roster-based full-name enrichment
+            - Fresh Google Sheets roster pull on each run
             """
         )
         st.markdown('<div class="note-card">Built for Fox Sports UFL game pages with the play-by-play tab.</div>', unsafe_allow_html=True)
@@ -103,7 +137,7 @@ def main() -> None:
     with col1:
         run_clicked = st.button("Generate CSVs", type="primary", use_container_width=True)
     with col2:
-        st.caption("The app uses the local roster file to enrich player names and writes the ambiguity report automatically.")
+        st.caption("Each run refreshes the roster from Google Sheets before building the CSVs.")
 
     if not run_clicked:
         return
@@ -112,14 +146,19 @@ def main() -> None:
         st.error("Enter a Fox Sports game URL first.")
         return
 
+    roster_path: Path | None = None
     try:
         with st.spinner("Scraping Fox Sports play-by-play and building exports..."):
-            headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, DEFAULT_ROSTER)
+            roster_path = write_temp_roster(credentials_info)
+            headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, roster_path)
             pbp_csv = csv_text(headers, rows)
             ambiguity_csv = csv_text(AMBIGUITY_REPORT_HEADERS, ambiguity_rows)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Could not generate outputs: {exc}")
         return
+    finally:
+        if roster_path and roster_path.exists():
+            roster_path.unlink(missing_ok=True)
 
     output_name = default_output_path(game_url.strip())
     ambiguity_name = output_name.with_name(f"{output_name.stem}_ambiguity_report.csv")

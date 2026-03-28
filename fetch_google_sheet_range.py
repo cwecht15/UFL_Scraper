@@ -2,11 +2,24 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
+from io import StringIO
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
+import gspread
 import requests
+from oauth2client.service_account import ServiceAccountCredentials
+
+
+DEFAULT_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+ROSTER_SHEET_ID = "1KUVJ_FhXFqze92Nn6Q4PGyohI4rcMHYr2FhqFmW7SfQ"
+ROSTER_TAB_NAME = "Roster Info"
+ROSTER_RANGE = "B3:D650"
 
 
 def extract_sheet_id(value: str) -> str:
@@ -44,6 +57,31 @@ def fetch_public_range(sheet_id: str, tab_name: str, cell_range: str) -> str:
             )
 
     raise RuntimeError("Could not retrieve the requested sheet range as CSV.")
+
+
+def fetch_authenticated_range(
+    credentials_info: dict[str, str], sheet_id: str, tab_name: str, cell_range: str
+) -> str:
+    credentials = ServiceAccountCredentials.from_json_keyfile_dict(credentials_info, DEFAULT_SCOPES)
+    client = gspread.authorize(credentials)
+    worksheet = client.open_by_key(sheet_id).worksheet(tab_name)
+    values = worksheet.get(cell_range)
+
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerows(values)
+    return buffer.getvalue()
+
+
+def fetch_range_csv_text(
+    sheet_id: str,
+    tab_name: str,
+    cell_range: str,
+    credentials_info: dict[str, str] | None = None,
+) -> str:
+    if credentials_info:
+        return fetch_authenticated_range(credentials_info, sheet_id, tab_name, cell_range)
+    return fetch_public_range(sheet_id, tab_name, cell_range)
 
 
 def write_csv_text(csv_text: str, output_path: Path) -> int:
