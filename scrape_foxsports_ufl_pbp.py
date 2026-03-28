@@ -992,17 +992,35 @@ def collect_ambiguity_rows(
         )
 
     for row in rows:
-        for short_field, _, _ in PLAYER_NAME_MAPPINGS:
+        for short_field, name_field, id_field in PLAYER_NAME_MAPPINGS:
             player = row.get(short_field, "").strip()
             if not player:
                 continue
             team = normalize_team_abbrev(player_team_context(row, short_field))
             if not team:
                 continue
-            candidates = ambiguous_lookup.get((normalize_short_name(player), team))
+            key = (normalize_short_name(player), team)
+            candidates = ambiguous_lookup.get(key)
             if not candidates:
+                player_id = row.get(id_field, "").strip()
+                player_name = row.get(name_field, "").strip()
+                if player_id and not player_name:
+                    add_issue(row, "unmatched_player_id", short_field, player, team, player_id)
                 continue
             add_issue(row, "ambiguous_player_id", short_field, player, team, " | ".join(candidates))
+
+        if row.get("pass_play") == "1":
+            passer = row.get("passer", "").strip()
+            passer_name = row.get("passer_name", "").strip()
+            passer_id = row.get("passer_id", "").strip()
+            if not passer or not passer_name or not passer_id:
+                add_issue(row, "missing_qb_info", "passer", passer, row.get("offense", ""), passer_id)
+
+            if row.get("dropback") != "1":
+                add_issue(row, "missing_pass_dropback", "dropback", team=row.get("offense", ""))
+
+            if row.get("sack") != "1" and row.get("scramble") != "1" and row.get("attempt") != "1":
+                add_issue(row, "missing_pass_result_flag", "attempt", team=row.get("offense", ""))
 
         if (
             row.get("pass_play") == "1"
