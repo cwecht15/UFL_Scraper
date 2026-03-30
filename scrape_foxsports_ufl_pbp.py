@@ -28,6 +28,11 @@ TEAM_ABBREV_ALIASES = {
     "STL": "STL",
 }
 
+ROSTER_TEAM_EQUIVALENTS = {
+    "ARL": {"ARL", "DAL"},
+    "DAL": {"DAL", "ARL"},
+}
+
 MAIN_INDICATORS = [
     "pass_play",
     "run_play",
@@ -416,6 +421,13 @@ def normalize_team_abbrev(value: str) -> str:
     return TEAM_ABBREV_ALIASES.get(value.strip().upper(), value.strip().upper())
 
 
+def roster_lookup_teams(team: str) -> set[str]:
+    normalized = normalize_team_abbrev(team)
+    if not normalized:
+        return set()
+    return ROSTER_TEAM_EQUIVALENTS.get(normalized, {normalized})
+
+
 def short_name_from_full_name(full_name: str) -> str:
     parts = [part for part in re.split(r"\s+", full_name.strip()) if part]
     if not parts:
@@ -448,9 +460,10 @@ def load_roster_lookup(roster_path: Path | None) -> tuple[dict[tuple[str, str], 
             short_name = short_name_from_full_name(full_name)
             if not full_name or not short_name or not team:
                 continue
-            key = (normalize_short_name(short_name), team)
-            lookup[key] = full_name
-            grouped.setdefault(key, []).append(full_name)
+            for lookup_team in roster_lookup_teams(team):
+                key = (normalize_short_name(short_name), lookup_team)
+                lookup[key] = full_name
+                grouped.setdefault(key, []).append(full_name)
     ambiguous = {key: names for key, names in grouped.items() if len(names) > 1}
     return lookup, ambiguous
 
