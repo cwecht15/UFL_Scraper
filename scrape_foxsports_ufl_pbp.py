@@ -520,6 +520,14 @@ def parse_review(row: dict[str, str], description: str) -> None:
         row["challenge_or_review_result"] = "upheld"
 
 
+def should_infer_offensive_no_play(row: dict[str, str]) -> bool:
+    if row.get("penalty") != "1" or row.get("penalty_declined") == "1":
+        return False
+    offense = normalize_team_abbrev(row.get("offense", ""))
+    penalty_team = normalize_team_abbrev(row.get("penalty_team", ""))
+    return bool(offense and penalty_team and offense == penalty_team)
+
+
 def parse_fumble(row: dict[str, str], description: str) -> None:
     muffed_catch = "muffs catch" in description.lower() or "muffed catch" in description.lower()
     if "FUMBLES" not in description and not muffed_catch:
@@ -1076,6 +1084,13 @@ def collect_ambiguity_rows(
         ):
             add_issue(row, "missing_targeted_receiver", "target", team=row.get("offense", ""))
 
+        if (
+            row.get("no_play") == "1"
+            and "No Play" not in row.get("play_description", "")
+            and should_infer_offensive_no_play(row)
+        ):
+            add_issue(row, "inferred_offensive_no_play", "no_play", team=row.get("offense", ""))
+
         if (row.get("run_play") == "1" or row.get("rush_attempt") == "1") and not row.get("rusher", "").strip():
             add_issue(row, "missing_rusher", "rusher", team=row.get("offense", ""))
 
@@ -1235,6 +1250,8 @@ def extract_rows(
                 populate_offense_defense(row, drive_team, home_team, away_team)
                 if pending_try_team:
                     apply_try_context(row, pending_try_team, home_team, away_team)
+                if should_infer_offensive_no_play(row) and "no_play" in row:
+                    row["no_play"] = "1"
                 parse_fumble(row, description)
                 enrich_player_columns(row, roster_lookup)
 
