@@ -900,6 +900,10 @@ def infer_score_delta(row: dict[str, str]) -> int:
     return 0
 
 
+def is_try_play(row: dict[str, str]) -> bool:
+    return row.get("1-pt") == "1" or row.get("two_point_att") == "1" or row.get("three_point_att") == "1"
+
+
 def score_team_for_play(row: dict[str, str], drive_team: str, home_team: str, away_team: str) -> str:
     if row.get("kickoff") == "1" and row.get("kick_return_touchdown") == "1":
         return row.get("receiving_team", "")
@@ -910,6 +914,16 @@ def score_team_for_play(row: dict[str, str], drive_team: str, home_team: str, aw
     if row.get("fumble_recovery_touchdown_1") == "1":
         return row.get("fumble_recovery_touchdown_1_team", "") or row.get("opponent_recovery_player_1_team", "") or row.get("defense", "")
     return drive_team
+
+
+def apply_try_context(row: dict[str, str], scoring_team: str, home_team: str, away_team: str) -> None:
+    if not scoring_team or not is_try_play(row):
+        return
+    defending_team = home_team if scoring_team == away_team else away_team
+    row["offense"] = scoring_team
+    row["defense"] = defending_team
+    if row.get("1-pt") == "1" and "kicking_team" in row:
+        row["kicking_team"] = scoring_team
 
 
 def populate_offense_defense(row: dict[str, str], drive_team: str, home_team: str, away_team: str) -> None:
@@ -1158,6 +1172,7 @@ def extract_rows(
 
     score = {home_team: 0, away_team: 0}
     play_number = 1
+    pending_try_team = ""
 
     for section_ref in table.arr(pbp.get("sections")):
         section = table.obj(section_ref)
@@ -1218,6 +1233,8 @@ def extract_rows(
                     row["safety"] = "1"
 
                 populate_offense_defense(row, drive_team, home_team, away_team)
+                if pending_try_team:
+                    apply_try_context(row, pending_try_team, home_team, away_team)
                 parse_fumble(row, description)
                 enrich_player_columns(row, roster_lookup)
 
@@ -1240,6 +1257,12 @@ def extract_rows(
                             row["offense_score"] = str(score[row["offense"]])
                         if "defense_score" in row and row.get("defense") in score:
                             row["defense_score"] = str(score[row["defense"]])
+                        if delta == 6:
+                            pending_try_team = scoring_team
+                        else:
+                            pending_try_team = ""
+                elif is_try_play(row):
+                    pending_try_team = ""
 
                 rows.append(row)
                 play_number += 1
