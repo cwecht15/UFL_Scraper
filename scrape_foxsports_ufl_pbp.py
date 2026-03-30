@@ -853,40 +853,6 @@ def parse_special_scoring(row: dict[str, str], description: str) -> None:
         row["interception_touchdown"] = "1"
 
 
-def suppress_no_play_stats(row: dict[str, str]) -> None:
-    preserve_indicators = {"no_play", "penalty", "penalty_declined"}
-    for column in MAIN_INDICATORS:
-        if column in row and column not in preserve_indicators:
-            row[column] = "0"
-
-    for short_field, name_field, id_field in PLAYER_NAME_MAPPINGS:
-        if short_field == "penalty_player":
-            continue
-        if short_field in row:
-            row[short_field] = ""
-        if name_field in row:
-            row[name_field] = ""
-        if id_field in row:
-            row[id_field] = ""
-
-    for column in [
-        "passing_yards",
-        "rushing_yards",
-        "field_goal_distance",
-        "pass_location",
-        "rush_location",
-        "fumble_1_team",
-        "own_recovery_player_1_team",
-        "opponent_recovery_player_1_team",
-        "fumble_lost_player_1_team",
-        "fumble_recovery_touchdown_1_team",
-        "kicking_team",
-        "receiving_team",
-    ]:
-        if column in row:
-            row[column] = ""
-
-
 def infer_score_delta(row: dict[str, str]) -> int:
     if row.get("no_play") == "1":
         return 0
@@ -1240,8 +1206,6 @@ def extract_rows(
 
                 populate_offense_defense(row, drive_team, home_team, away_team)
                 parse_fumble(row, description)
-                if row.get("no_play") == "1":
-                    suppress_no_play_stats(row)
                 enrich_player_columns(row, roster_lookup)
 
                 if "yards_to_score" in row:
