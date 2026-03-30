@@ -508,15 +508,23 @@ def parse_review(row: dict[str, str], description: str) -> None:
 
 
 def parse_fumble(row: dict[str, str], description: str) -> None:
-    if "FUMBLES" not in description:
+    muffed_catch = "muffs catch" in description.lower() or "muffed catch" in description.lower()
+    if "FUMBLES" not in description and not muffed_catch:
         return
 
     if "fumble" in row:
         row["fumble"] = "1"
-    if "fumble_1_team" in row and row.get("offense"):
-        row["fumble_1_team"] = row["offense"]
+    fumble_team = row.get("offense", "")
+    if row.get("kickoff") == "1":
+        fumble_team = row.get("receiving_team", "") or row.get("defense", "") or fumble_team
+    elif row.get("punt") == "1":
+        fumble_team = row.get("defense", "") or fumble_team
+    if "fumble_1_team" in row and fumble_team:
+        row["fumble_1_team"] = fumble_team
 
     fumbler = re.search(rf"(?P<player>{PLAYER_RE}) FUMBLES", description)
+    if not fumbler and muffed_catch:
+        fumbler = re.search(rf"(?P<player>{PLAYER_RE}) MUFFS catch", description, re.I)
     if fumbler:
         if "fumble_player_1" in row:
             row["fumble_player_1"] = fumbler.group("player")
@@ -528,7 +536,7 @@ def parse_fumble(row: dict[str, str], description: str) -> None:
     if own_recovery:
         team = own_recovery.group("team")
         player = own_recovery.group("player")
-        if row.get("offense") and team == row["offense"]:
+        if fumble_team and team == fumble_team:
             if "own_recovery_1" in row:
                 row["own_recovery_1"] = "1"
             if "own_recovery_player_1" in row:
@@ -547,7 +555,7 @@ def parse_fumble(row: dict[str, str], description: str) -> None:
             if "fumble_lost_player_1" in row:
                 row["fumble_lost_player_1"] = fumbler.group("player") if fumbler else ""
             if "fumble_lost_player_1_team" in row:
-                row["fumble_lost_player_1_team"] = row.get("offense", "")
+                row["fumble_lost_player_1_team"] = fumble_team
 
         if "TOUCHDOWN" in description and "fumble_recovery_touchdown_1_team" in row:
             row["fumble_recovery_touchdown_1_team"] = team
@@ -611,7 +619,7 @@ def parse_punt(row: dict[str, str], description: str) -> bool:
         row["punt_touchback"] = "1"
     if "downed" in description.lower() and "punt_downed" in row:
         row["punt_downed"] = "1"
-    if "muffed" in description.lower() and "punt_muffed" in row:
+    if ("muffed" in description.lower() or "muffs catch" in description.lower()) and "punt_muffed" in row:
         row["punt_muffed"] = "1"
     if "blocked" in description.lower() and "punt_blocked" in row:
         row["punt_blocked"] = "1"
@@ -622,7 +630,7 @@ def parse_punt(row: dict[str, str], description: str) -> bool:
 
 def parse_field_goal(row: dict[str, str], description: str) -> bool:
     match = re.search(
-        rf"^(?P<kicker>{PLAYER_RE}) (?P<distance>\d+) yard field goal attempt is (?P<result>good|no good|blocked)",
+        rf"^(?P<kicker>{PLAYER_RE}) (?P<distance>\d+) yard (?P<variant>four-point )?field goal attempt is (?P<result>good|no good|blocked)",
         description,
         re.I,
     )
@@ -845,7 +853,43 @@ def parse_special_scoring(row: dict[str, str], description: str) -> None:
         row["interception_touchdown"] = "1"
 
 
+def suppress_no_play_stats(row: dict[str, str]) -> None:
+    preserve_indicators = {"no_play", "penalty", "penalty_declined"}
+    for column in MAIN_INDICATORS:
+        if column in row and column not in preserve_indicators:
+            row[column] = "0"
+
+    for short_field, name_field, id_field in PLAYER_NAME_MAPPINGS:
+        if short_field == "penalty_player":
+            continue
+        if short_field in row:
+            row[short_field] = ""
+        if name_field in row:
+            row[name_field] = ""
+        if id_field in row:
+            row[id_field] = ""
+
+    for column in [
+        "passing_yards",
+        "rushing_yards",
+        "field_goal_distance",
+        "pass_location",
+        "rush_location",
+        "fumble_1_team",
+        "own_recovery_player_1_team",
+        "opponent_recovery_player_1_team",
+        "fumble_lost_player_1_team",
+        "fumble_recovery_touchdown_1_team",
+        "kicking_team",
+        "receiving_team",
+    ]:
+        if column in row:
+            row[column] = ""
+
+
 def infer_score_delta(row: dict[str, str]) -> int:
+    if row.get("no_play") == "1":
+        return 0
     if row.get("1-pt") == "1":
         return 1 if row.get("1-pt Succes") == "1" else 0
     if row.get("two_point_att") == "1":
@@ -853,7 +897,11 @@ def infer_score_delta(row: dict[str, str]) -> int:
     if row.get("three_point_att") == "1":
         return 3 if row.get("three_point_att_succeeds") == "1" else 0
     if row.get("field_goal") == "1":
-        return 3 if row.get("field_goal_made") == "1" else 0
+        if row.get("field_goal_made") != "1":
+            return 0
+        if "four-point field goal attempt" in row.get("play_description", "").lower():
+            return 4
+        return 3
     if row.get("safety") == "1":
         return 2
     if any(
@@ -899,8 +947,12 @@ def populate_offense_defense(row: dict[str, str], drive_team: str, home_team: st
 
 
 def player_team_context(row: dict[str, str], short_field: str) -> str:
-    if short_field in {"passer", "receiver", "rusher", "fumble_player_1", "fumble_lost_player_1"}:
+    if short_field in {"passer", "receiver", "rusher"}:
         return row.get("offense", "")
+    if short_field == "fumble_player_1":
+        return row.get("fumble_1_team", "") or row.get("offense", "")
+    if short_field == "fumble_lost_player_1":
+        return row.get("fumble_lost_player_1_team", "") or row.get("offense", "")
     if short_field in {
         "1pt Rusher",
         "1PT Passer",
@@ -1188,6 +1240,8 @@ def extract_rows(
 
                 populate_offense_defense(row, drive_team, home_team, away_team)
                 parse_fumble(row, description)
+                if row.get("no_play") == "1":
+                    suppress_no_play_stats(row)
                 enrich_player_columns(row, roster_lookup)
 
                 if "yards_to_score" in row:
