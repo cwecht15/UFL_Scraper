@@ -442,6 +442,27 @@ def build_on_field_entries(rows: list[dict[str, str]]) -> pd.DataFrame:
     return pd.DataFrame(entry_rows)
 
 
+def apply_previous_play_defaults(entry_df: pd.DataFrame) -> pd.DataFrame:
+    if entry_df.empty:
+        return entry_df
+
+    updated_df = entry_df.copy()
+    carry_columns = ENTRY_PLAYER_COLUMNS + ENTRY_ROLE_COLUMNS
+    for idx in range(1, len(updated_df)):
+        previous_offense = str(updated_df.at[idx - 1, "offense"]).strip()
+        current_offense = str(updated_df.at[idx, "offense"]).strip()
+        if previous_offense != current_offense:
+            continue
+        for column in carry_columns:
+            current_value = str(updated_df.at[idx, column]).strip()
+            if current_value:
+                continue
+            previous_value = str(updated_df.at[idx - 1, column]).strip()
+            if previous_value:
+                updated_df.at[idx, column] = previous_value
+    return updated_df
+
+
 def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[str, str, str, pd.DataFrame]:
     data_key = f"on_field_entries::{game_key}"
     index_key = f"on_field_index::{game_key}"
@@ -455,6 +476,7 @@ def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[st
         st.session_state[picker_key] = 0
         st.session_state[built_key] = f"{game_key}:{len(built_df)}"
 
+    st.session_state[data_key] = apply_previous_play_defaults(st.session_state[data_key])
     return data_key, index_key, picker_key, st.session_state[data_key]
 
 
