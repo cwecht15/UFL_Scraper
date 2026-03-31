@@ -500,13 +500,14 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
     current_index = int(st.session_state.get(index_key, 0))
     current_index = max(0, min(current_index, len(entry_df) - 1))
     st.session_state[index_key] = current_index
+    if st.session_state.get(picker_key) != current_index:
+        st.session_state[picker_key] = current_index
 
     nav_cols = st.columns([1, 3, 1])
     with nav_cols[0]:
         if st.button("Previous Play", use_container_width=True, disabled=current_index == 0, key=f"prev_play_{game_key}"):
             next_index = max(current_index - 1, 0)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
     with nav_cols[1]:
         selected_index = st.selectbox(
@@ -518,7 +519,6 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
         )
         if selected_index != current_index:
             st.session_state[index_key] = selected_index
-            st.session_state[picker_key] = selected_index
             st.rerun()
     with nav_cols[2]:
         if st.button(
@@ -529,7 +529,6 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
         ):
             next_index = min(current_index + 1, len(entry_df) - 1)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
 
     current_row = st.session_state[data_key].iloc[current_index].to_dict()
@@ -590,7 +589,6 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
             st.session_state[data_key] = updated_df
             next_index = min(current_index + 1, len(entry_df) - 1)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
 
     completed_mask = st.session_state[data_key][ENTRY_PLAYER_COLUMNS].fillna("").apply(
