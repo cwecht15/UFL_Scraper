@@ -38,10 +38,10 @@ def app_css() -> None:
         <style>
         .stApp {
             background:
-                radial-gradient(circle at top right, rgba(158, 201, 88, 0.10), transparent 28%),
-                radial-gradient(circle at top left, rgba(233, 96, 83, 0.05), transparent 24%),
-                linear-gradient(180deg, #f7f3eb 0%, #efe8dc 100%);
-            color: #18220f;
+                radial-gradient(circle at top right, rgba(158, 201, 88, 0.14), transparent 26%),
+                radial-gradient(circle at top left, rgba(233, 96, 83, 0.10), transparent 24%),
+                linear-gradient(180deg, #0d1117 0%, #111722 45%, #151d2b 100%);
+            color: #e8edf5;
         }
         .main .block-container {
             padding-top: 2rem;
@@ -49,24 +49,24 @@ def app_css() -> None:
         }
         .hero {
             padding: 1.2rem 1.4rem;
-            border: 1px solid rgba(33, 33, 33, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 18px;
-            background: rgba(255, 255, 255, 0.82);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            background: rgba(20, 27, 39, 0.86);
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
             margin-bottom: 1rem;
         }
         .hero h1 {
             font-size: 2rem;
             margin: 0 0 0.3rem 0;
-            color: #18220f;
+            color: #f7f9fc;
         }
         .hero p {
             margin: 0;
-            color: #44503b;
+            color: #b4c0d1;
             font-size: 1rem;
         }
         [data-testid="stSidebar"] {
-            background: #23242c;
+            background: #11161f;
         }
         [data-testid="stSidebar"] * {
             color: #f4f2ed !important;
@@ -92,37 +92,53 @@ def app_css() -> None:
         [data-testid="stMarkdownContainer"] li,
         [data-testid="stCaptionContainer"] p,
         [data-testid="stTextInputRootElement"] + div,
+        [data-baseweb="select"] *,
         .stTextInput label p,
+        .stSelectbox label p,
         .stSubheader,
         .stAlert,
         .stException,
         [data-testid="stMetricLabel"] p {
-            color: #24301c !important;
+            color: #d5deea !important;
         }
         [data-testid="stMetric"] {
-            background: rgba(255, 255, 255, 0.62);
-            border: 1px solid rgba(24, 34, 15, 0.08);
+            background: rgba(20, 27, 39, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 16px;
             padding: 0.9rem 1rem;
         }
         [data-testid="stMetricValue"] {
-            color: #18220f !important;
+            color: #f7f9fc !important;
         }
         [data-testid="stMetricLabel"] {
-            color: #506047 !important;
+            color: #a9b8cb !important;
+        }
+        [data-testid="stTextInputRootElement"],
+        [data-baseweb="select"] > div,
+        [data-baseweb="select"] input,
+        [data-baseweb="select"] {
+            color: #f4f7fb !important;
+        }
+        [data-testid="stTextInputRootElement"] > div,
+        [data-baseweb="select"] > div {
+            background: rgba(11, 16, 24, 0.84) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 12px !important;
         }
         [data-testid="stTextInputRootElement"] input {
             color: #f8f8f6;
         }
         [data-testid="stTextInputRootElement"] label,
-        [data-testid="stTextInputRootElement"] p {
-            color: #24301c !important;
+        [data-testid="stTextInputRootElement"] p,
+        .stSelectbox label,
+        .stSelectbox p {
+            color: #d5deea !important;
         }
         [data-testid="stDownloadButton"] button {
             border-radius: 14px;
-            background: #171923 !important;
+            background: #1c2433 !important;
             color: #fffaf2 !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
             font-weight: 600;
         }
         [data-testid="stDownloadButton"] button p,
@@ -131,19 +147,52 @@ def app_css() -> None:
             color: #fffaf2 !important;
         }
         [data-testid="stDownloadButton"] button:hover {
-            background: #222532 !important;
+            background: #283246 !important;
             color: #ffffff !important;
+        }
+        .stButton button {
+            border-radius: 14px;
+            background: #dd5b52 !important;
+            color: #fff9f7 !important;
+            border: 0 !important;
+            font-weight: 600;
+        }
+        .stButton button:hover {
+            background: #ea6d63 !important;
         }
         .stDataFrame,
         [data-testid="stDataFrame"] {
-            background: rgba(255, 255, 255, 0.72);
+            background: rgba(18, 24, 34, 0.82);
             border-radius: 16px;
+        }
+        [data-testid="stDataFrame"] div {
+            color: #e8edf5 !important;
+        }
+        [data-baseweb="tab-list"] {
+            gap: 0.35rem;
+        }
+        button[data-baseweb="tab"] {
+            background: rgba(20, 27, 39, 0.76) !important;
+            border-radius: 12px !important;
+            color: #bfd0e5 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        button[data-baseweb="tab"][aria-selected="true"] {
+            background: rgba(221, 91, 82, 0.18) !important;
+            color: #fff4f1 !important;
+            border-color: rgba(221, 91, 82, 0.55) !important;
+        }
+        [data-testid="stAlert"] {
+            background: rgba(20, 27, 39, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #e8edf5 !important;
         }
         .note-card {
             padding: 0.9rem 1rem;
             border-radius: 14px;
-            background: rgba(24, 34, 15, 0.05);
-            border: 1px solid rgba(24, 34, 15, 0.08);
+            background: rgba(20, 27, 39, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #e8edf5 !important;
         }
         </style>
         """,
