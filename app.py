@@ -559,7 +559,8 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
                 updated_df.at[current_index, slot] = selections[slot].strip()
                 updated_df.at[current_index, f"{slot}_role"] = role_selections[slot].strip()
             st.session_state[data_key] = updated_df
-            st.success(f"Saved on-field entries for play {current_row['play_number']}.")
+            st.session_state[index_key] = min(current_index + 1, len(entry_df) - 1)
+            st.rerun()
 
     completed_mask = st.session_state[data_key][ENTRY_PLAYER_COLUMNS].fillna("").apply(
         lambda row: any(str(value).strip() for value in row),
