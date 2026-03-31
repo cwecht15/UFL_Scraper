@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import os
 import tempfile
@@ -25,6 +26,7 @@ from scrape_foxsports_ufl_pbp import (
 )
 
 ENTRY_PLAYER_COLUMNS = ["qb", "skill_1", "skill_2", "skill_3", "skill_4", "skill_5"]
+HISTORICAL_PLAYER_DB = Path("historical_player_database.csv")
 
 
 st.set_page_config(page_title="UFL Fox Sports PBP Exporter", page_icon="football", layout="wide")
@@ -257,6 +259,49 @@ def aggregate_player_stats(rows: list[dict[str, str]]) -> tuple[list[dict[str, i
     return passing_rows, rushing_rows, receiving_rows
 
 
+def roster_player_names(roster_path: Path | None) -> set[str]:
+    names: set[str] = set()
+    if roster_path and roster_path.exists():
+        with roster_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            for row in reader:
+                if row and row[0].strip():
+                    names.add(row[0].strip())
+    return names
+
+
+def load_historical_player_names() -> set[str]:
+    names: set[str] = set()
+    if not HISTORICAL_PLAYER_DB.exists():
+        return names
+
+    with HISTORICAL_PLAYER_DB.open(newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        for row in reader:
+            if not row:
+                continue
+            first_value = row[0].strip()
+            if not first_value or first_value == "player_name":
+                continue
+            names.add(first_value)
+    return names
+
+
+def sync_player_dropdown_options(roster_path: Path | None) -> list[str]:
+    historical_names = load_historical_player_names()
+    current_names = roster_player_names(roster_path)
+    merged_names = historical_names | current_names
+
+    if merged_names and (merged_names != historical_names or not HISTORICAL_PLAYER_DB.exists()):
+        with HISTORICAL_PLAYER_DB.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(["player_name"])
+            for player_name in sorted(merged_names):
+                writer.writerow([player_name])
+
+    return [""] + sorted(merged_names)
+
+
 def play_clock_label(row: dict[str, str]) -> str:
     quarter = row.get("quarter", "")
     minutes = row.get("minutes", "")
@@ -306,7 +351,14 @@ def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[st
     return data_key, index_key, st.session_state[data_key]
 
 
-def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path) -> None:
+def player_option_index(player_options: list[str], current_value: str) -> int:
+    try:
+        return player_options.index(current_value)
+    except ValueError:
+        return 0
+
+
+def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path, player_options: list[str]) -> None:
     st.subheader("On-Field Entries")
     st.caption("Step through each play and enter the QB plus five skill players. Download this as a separate CSV you can join back to the play-by-play export.")
 
@@ -360,13 +412,13 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
 
     with st.form(f"on_field_form_{game_key}_{current_row['play_number']}"):
         field_cols = st.columns(3)
-        qb = field_cols[0].text_input("QB", value=str(current_row["qb"]))
-        skill_1 = field_cols[1].text_input("Skill 1", value=str(current_row["skill_1"]))
-        skill_2 = field_cols[2].text_input("Skill 2", value=str(current_row["skill_2"]))
+        qb = field_cols[0].selectbox("QB", player_options, index=player_option_index(player_options, str(current_row["qb"])))
+        skill_1 = field_cols[1].selectbox("Skill 1", player_options, index=player_option_index(player_options, str(current_row["skill_1"])))
+        skill_2 = field_cols[2].selectbox("Skill 2", player_options, index=player_option_index(player_options, str(current_row["skill_2"])))
         field_cols_2 = st.columns(3)
-        skill_3 = field_cols_2[0].text_input("Skill 3", value=str(current_row["skill_3"]))
-        skill_4 = field_cols_2[1].text_input("Skill 4", value=str(current_row["skill_4"]))
-        skill_5 = field_cols_2[2].text_input("Skill 5", value=str(current_row["skill_5"]))
+        skill_3 = field_cols_2[0].selectbox("Skill 3", player_options, index=player_option_index(player_options, str(current_row["skill_3"])))
+        skill_4 = field_cols_2[1].selectbox("Skill 4", player_options, index=player_option_index(player_options, str(current_row["skill_4"])))
+        skill_5 = field_cols_2[2].selectbox("Skill 5", player_options, index=player_option_index(player_options, str(current_row["skill_5"])))
         save_clicked = st.form_submit_button("Save Play Entry", use_container_width=True)
 
     if save_clicked:
@@ -470,12 +522,14 @@ def main() -> None:
     roster_path: Path | None = None
     roster_source = ""
     roster_warning: str | None = None
+    player_options: list[str] = [""]
     try:
         with st.spinner("Scraping Fox Sports play-by-play and building exports..."):
             roster_path, roster_source, roster_warning = resolve_roster_source(credentials_info)
             headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, roster_path)
             pbp_csv = csv_text(headers, rows)
             ambiguity_csv = csv_text(AMBIGUITY_REPORT_HEADERS, ambiguity_rows)
+            player_options = sync_player_dropdown_options(roster_path)
     except Exception as exc:  # noqa: BLE001
         st.error(f"Could not generate outputs: {exc}")
         return
@@ -515,38 +569,43 @@ def main() -> None:
             use_container_width=True,
         )
 
-    render_on_field_entry_workflow(rows, output_name)
+    totals_tab, on_field_tab, preview_tab, ambiguity_tab = st.tabs(
+        ["Player Totals", "On-Field Entries", "Preview", "Ambiguity Report"]
+    )
 
-    st.subheader("Player Totals")
-    pass_tab, rush_tab, rec_tab = st.tabs(["Passing", "Rushing", "Receiving"])
+    with totals_tab:
+        pass_tab, rush_tab, rec_tab = st.tabs(["Passing", "Rushing", "Receiving"])
 
-    with pass_tab:
-        if passing_rows:
-            st.dataframe(passing_rows, use_container_width=True, hide_index=True)
+        with pass_tab:
+            if passing_rows:
+                st.dataframe(passing_rows, use_container_width=True, hide_index=True)
+            else:
+                st.info("No passing stats found for this game.")
+
+        with rush_tab:
+            if rushing_rows:
+                st.dataframe(rushing_rows, use_container_width=True, hide_index=True)
+            else:
+                st.info("No rushing stats found for this game.")
+
+        with rec_tab:
+            if receiving_rows:
+                st.dataframe(receiving_rows, use_container_width=True, hide_index=True)
+            else:
+                st.info("No receiving stats found for this game.")
+
+    with on_field_tab:
+        render_on_field_entry_workflow(rows, output_name, player_options)
+
+    with preview_tab:
+        st.caption("Top rows from the generated play-by-play export.")
+        st.dataframe(rows[:15], use_container_width=True, hide_index=True)
+
+    with ambiguity_tab:
+        if ambiguity_rows:
+            st.dataframe(ambiguity_rows, use_container_width=True, hide_index=True)
         else:
-            st.info("No passing stats found for this game.")
-
-    with rush_tab:
-        if rushing_rows:
-            st.dataframe(rushing_rows, use_container_width=True, hide_index=True)
-        else:
-            st.info("No rushing stats found for this game.")
-
-    with rec_tab:
-        if receiving_rows:
-            st.dataframe(receiving_rows, use_container_width=True, hide_index=True)
-        else:
-            st.info("No receiving stats found for this game.")
-
-    st.subheader("Preview")
-    st.caption("Top rows from the generated play-by-play export.")
-    st.dataframe(rows[:15], use_container_width=True, hide_index=True)
-
-    st.subheader("Ambiguity Report")
-    if ambiguity_rows:
-        st.dataframe(ambiguity_rows, use_container_width=True, hide_index=True)
-    else:
-        st.success("No ambiguity or missing-player issues were found for this game.")
+            st.success("No ambiguity or missing-player issues were found for this game.")
 
 
 if __name__ == "__main__":
