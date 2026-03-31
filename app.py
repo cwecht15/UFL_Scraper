@@ -447,7 +447,6 @@ def apply_previous_play_defaults(entry_df: pd.DataFrame) -> pd.DataFrame:
         return entry_df
 
     updated_df = entry_df.copy()
-    carry_columns = ENTRY_PLAYER_COLUMNS + ENTRY_ROLE_COLUMNS
     for idx in range(1, len(updated_df)):
         previous_offense = str(updated_df.at[idx - 1, "offense"]).strip()
         current_offense = str(updated_df.at[idx, "offense"]).strip()
@@ -456,7 +455,7 @@ def apply_previous_play_defaults(entry_df: pd.DataFrame) -> pd.DataFrame:
         is_scrimmage_play = str(updated_df.at[idx, "run_play"]).strip() == "1" or str(updated_df.at[idx, "pass_play"]).strip() == "1"
         if not is_scrimmage_play:
             continue
-        for column in carry_columns:
+        for column in ENTRY_PLAYER_COLUMNS:
             current_value = str(updated_df.at[idx, column]).strip()
             if current_value:
                 continue
