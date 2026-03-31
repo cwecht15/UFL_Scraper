@@ -620,33 +620,57 @@ def main() -> None:
     with col2:
         st.caption("Each run refreshes the roster from Google Sheets before building the CSVs.")
 
-    if not run_clicked:
+    if run_clicked:
+        if not game_url.strip():
+            st.error("Enter a Fox Sports game URL first.")
+            return
+
+        roster_path: Path | None = None
+        roster_source = ""
+        roster_warning: str | None = None
+        player_options: list[str] = [""]
+        try:
+            with st.spinner("Scraping Fox Sports play-by-play and building exports..."):
+                roster_path, roster_source, roster_warning = resolve_roster_source(credentials_info)
+                headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, roster_path)
+                pbp_csv = csv_text(headers, rows)
+                ambiguity_csv = csv_text(AMBIGUITY_REPORT_HEADERS, ambiguity_rows)
+                player_options = sync_player_dropdown_options(roster_path)
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Could not generate outputs: {exc}")
+            return
+        finally:
+            if roster_source == "live_google_sheet" and roster_path and roster_path.exists():
+                roster_path.unlink(missing_ok=True)
+
+        output_name = default_output_path(game_url.strip())
+        st.session_state["generated_game_result"] = {
+            "game_url": game_url.strip(),
+            "rows": rows,
+            "ambiguity_rows": ambiguity_rows,
+            "pbp_csv": pbp_csv,
+            "ambiguity_csv": ambiguity_csv,
+            "output_name": output_name.name,
+            "ambiguity_name": f"{output_name.stem}_ambiguity_report.csv",
+            "roster_source": roster_source,
+            "roster_warning": roster_warning,
+            "player_options": player_options,
+        }
+
+    result = st.session_state.get("generated_game_result")
+    if not result:
         return
 
-    if not game_url.strip():
-        st.error("Enter a Fox Sports game URL first.")
-        return
+    rows = result["rows"]
+    ambiguity_rows = result["ambiguity_rows"]
+    pbp_csv = result["pbp_csv"]
+    ambiguity_csv = result["ambiguity_csv"]
+    output_name = Path(result["output_name"])
+    ambiguity_name = Path(result["ambiguity_name"])
+    roster_source = result["roster_source"]
+    roster_warning = result["roster_warning"]
+    player_options = result["player_options"]
 
-    roster_path: Path | None = None
-    roster_source = ""
-    roster_warning: str | None = None
-    player_options: list[str] = [""]
-    try:
-        with st.spinner("Scraping Fox Sports play-by-play and building exports..."):
-            roster_path, roster_source, roster_warning = resolve_roster_source(credentials_info)
-            headers, rows, ambiguity_rows = extract_rows(game_url.strip(), DEFAULT_TEMPLATE, roster_path)
-            pbp_csv = csv_text(headers, rows)
-            ambiguity_csv = csv_text(AMBIGUITY_REPORT_HEADERS, ambiguity_rows)
-            player_options = sync_player_dropdown_options(roster_path)
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"Could not generate outputs: {exc}")
-        return
-    finally:
-        if roster_source == "live_google_sheet" and roster_path and roster_path.exists():
-            roster_path.unlink(missing_ok=True)
-
-    output_name = default_output_path(game_url.strip())
-    ambiguity_name = output_name.with_name(f"{output_name.stem}_ambiguity_report.csv")
     passing_rows, rushing_rows, receiving_rows = aggregate_player_stats(rows)
 
     if roster_source == "live_google_sheet":
