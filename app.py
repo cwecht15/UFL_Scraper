@@ -24,6 +24,7 @@ from scrape_foxsports_ufl_pbp import (
     default_output_path,
     extract_rows,
     normalize_team_abbrev,
+    short_name_from_full_name,
 )
 
 ENTRY_PLAYER_COLUMNS = ["qb", "skill_1", "skill_2", "skill_3", "skill_4", "skill_5"]
@@ -340,6 +341,23 @@ def team_from_player_label(label: str) -> str:
     return normalize_team_abbrev(label.rsplit("(", 1)[1].rstrip(")").strip())
 
 
+def name_from_player_label(label: str) -> str:
+    if not label:
+        return ""
+    if " (" in label and label.endswith(")"):
+        return label.rsplit(" (", 1)[0].strip()
+    return label.strip()
+
+
+def player_id_from_label(label: str) -> str:
+    name = name_from_player_label(label)
+    team = team_from_player_label(label)
+    short_name = short_name_from_full_name(name)
+    if short_name and team:
+        return f"{short_name} {team}"
+    return ""
+
+
 def roster_player_records(roster_path: Path | None) -> set[tuple[str, str]]:
     records: set[tuple[str, str]] = set()
     if roster_path and roster_path.exists():
@@ -410,6 +428,9 @@ def build_on_field_entries(rows: list[dict[str, str]]) -> pd.DataFrame:
             "clock": play_clock_label(row),
             "offense": row.get("offense", ""),
             "defense": row.get("defense", ""),
+            "no_play": row.get("no_play", ""),
+            "run_play": row.get("run_play", ""),
+            "pass_play": row.get("pass_play", ""),
             "play_description": description,
         }
         for column in ENTRY_PLAYER_COLUMNS:
@@ -549,10 +570,14 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
     entry_stats[0].metric("Entry Rows", len(st.session_state[data_key]))
     entry_stats[1].metric("Completed Plays", completed_count)
 
+    download_df = st.session_state[data_key].copy()
+    for slot in ENTRY_PLAYER_COLUMNS:
+        download_df[slot] = download_df[slot].apply(lambda value: player_id_from_label(str(value).strip()))
+
     entries_output = output_name.with_name(f"{output_name.stem}_on_field_entries.csv")
     st.download_button(
         "Download On-Field Entries CSV",
-        data=st.session_state[data_key].to_csv(index=False),
+        data=download_df.to_csv(index=False),
         file_name=entries_output.name,
         mime="text/csv",
         use_container_width=True,
