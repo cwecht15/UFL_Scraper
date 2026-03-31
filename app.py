@@ -487,6 +487,11 @@ def player_option_index(player_options: list[str], current_value: str) -> int:
         return 0
 
 
+def clear_role_widget_state(game_key: str, play_number: str) -> None:
+    for column in ENTRY_ROLE_COLUMNS:
+        st.session_state.pop(f"{game_key}_{play_number}_{column}", None)
+
+
 def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path, player_options: list[str]) -> None:
     st.subheader("On-Field Entries")
     st.caption("Step through each play and enter the QB plus five skill players. Download this as a separate CSV you can join back to the play-by-play export.")
@@ -505,6 +510,8 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
     with nav_cols[0]:
         if st.button("Previous Play", use_container_width=True, disabled=current_index == 0, key=f"prev_play_{game_key}"):
             next_index = max(current_index - 1, 0)
+            next_play_number = str(entry_df.iloc[next_index]["play_number"])
+            clear_role_widget_state(game_key, next_play_number)
             st.session_state[index_key] = next_index
             st.rerun()
     with nav_cols[1]:
@@ -515,6 +522,8 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
             format_func=lambda idx: f"Play {entry_df.iloc[idx]['play_number']} | {entry_df.iloc[idx]['clock']} | {entry_df.iloc[idx]['offense']} | {entry_df.iloc[idx]['play_description'][:90]}",
         )
         if selected_index != current_index:
+            selected_play_number = str(entry_df.iloc[selected_index]["play_number"])
+            clear_role_widget_state(game_key, selected_play_number)
             st.session_state[index_key] = selected_index
             st.rerun()
     with nav_cols[2]:
@@ -525,6 +534,8 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
             key=f"next_play_{game_key}",
         ):
             next_index = min(current_index + 1, len(entry_df) - 1)
+            next_play_number = str(entry_df.iloc[next_index]["play_number"])
+            clear_role_widget_state(game_key, next_play_number)
             st.session_state[index_key] = next_index
             st.rerun()
 
@@ -585,6 +596,8 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
                 updated_df.at[current_index, f"{slot}_role"] = role_selections[slot].strip()
             st.session_state[data_key] = updated_df
             next_index = min(current_index + 1, len(entry_df) - 1)
+            next_play_number = str(entry_df.iloc[next_index]["play_number"])
+            clear_role_widget_state(game_key, next_play_number)
             st.session_state[index_key] = next_index
             st.rerun()
 
