@@ -6,6 +6,7 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from fetch_google_sheet_range import (
@@ -22,6 +23,8 @@ from scrape_foxsports_ufl_pbp import (
     default_output_path,
     extract_rows,
 )
+
+ENTRY_PLAYER_COLUMNS = ["qb", "skill_1", "skill_2", "skill_3", "skill_4", "skill_5"]
 
 
 st.set_page_config(page_title="UFL Fox Sports PBP Exporter", page_icon="football", layout="wide")
@@ -254,6 +257,156 @@ def aggregate_player_stats(rows: list[dict[str, str]]) -> tuple[list[dict[str, i
     return passing_rows, rushing_rows, receiving_rows
 
 
+def play_clock_label(row: dict[str, str]) -> str:
+    quarter = row.get("quarter", "")
+    minutes = row.get("minutes", "")
+    seconds = row.get("seconds", "")
+    if minutes != "" and seconds != "":
+        return f"Q{quarter} {int_value(minutes):02d}:{int_value(seconds):02d}"
+    return f"Q{quarter}" if quarter else ""
+
+
+def build_on_field_entries(rows: list[dict[str, str]]) -> pd.DataFrame:
+    entry_rows: list[dict[str, str]] = []
+    for row in rows:
+        if row.get("play_number") == "0":
+            continue
+        description = row.get("play_description", "")
+        if description.startswith("End Quarter") or description == "End Game":
+            continue
+
+        entry_row = {
+            "play_number": row.get("play_number", ""),
+            "quarter": row.get("quarter", ""),
+            "minutes": row.get("minutes", ""),
+            "seconds": row.get("seconds", ""),
+            "clock": play_clock_label(row),
+            "offense": row.get("offense", ""),
+            "defense": row.get("defense", ""),
+            "play_description": description,
+        }
+        for column in ENTRY_PLAYER_COLUMNS:
+            entry_row[column] = ""
+        entry_rows.append(entry_row)
+
+    return pd.DataFrame(entry_rows)
+
+
+def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[str, str, pd.DataFrame]:
+    data_key = f"on_field_entries::{game_key}"
+    index_key = f"on_field_index::{game_key}"
+    built_key = f"on_field_built::{game_key}"
+    built_df = build_on_field_entries(rows)
+
+    if built_key not in st.session_state or st.session_state[built_key] != f"{game_key}:{len(built_df)}":
+        st.session_state[data_key] = built_df
+        st.session_state[index_key] = 0
+        st.session_state[built_key] = f"{game_key}:{len(built_df)}"
+
+    return data_key, index_key, st.session_state[data_key]
+
+
+def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path) -> None:
+    st.subheader("On-Field Entries")
+    st.caption("Step through each play and enter the QB plus five skill players. Download this as a separate CSV you can join back to the play-by-play export.")
+
+    game_key = output_name.stem
+    data_key, index_key, entry_df = ensure_on_field_state(game_key, rows)
+    if entry_df.empty:
+        st.info("No play rows are available for manual on-field entry.")
+        return
+
+    current_index = int(st.session_state.get(index_key, 0))
+    current_index = max(0, min(current_index, len(entry_df) - 1))
+    st.session_state[index_key] = current_index
+
+    nav_cols = st.columns([1, 3, 1])
+    with nav_cols[0]:
+        if st.button("Previous Play", use_container_width=True, disabled=current_index == 0, key=f"prev_play_{game_key}"):
+            st.session_state[index_key] = max(current_index - 1, 0)
+            st.rerun()
+    with nav_cols[1]:
+        selected_index = st.selectbox(
+            "Jump to play",
+            options=list(range(len(entry_df))),
+            index=current_index,
+            format_func=lambda idx: f"Play {entry_df.iloc[idx]['play_number']} | {entry_df.iloc[idx]['clock']} | {entry_df.iloc[idx]['offense']} | {entry_df.iloc[idx]['play_description'][:90]}",
+            key=f"play_picker_{game_key}",
+        )
+        if selected_index != current_index:
+            st.session_state[index_key] = selected_index
+            current_index = selected_index
+    with nav_cols[2]:
+        if st.button(
+            "Next Play",
+            use_container_width=True,
+            disabled=current_index >= len(entry_df) - 1,
+            key=f"next_play_{game_key}",
+        ):
+            st.session_state[index_key] = min(current_index + 1, len(entry_df) - 1)
+            st.rerun()
+
+    current_row = st.session_state[data_key].iloc[current_index].to_dict()
+    st.markdown(
+        f"""
+        <div class="note-card">
+            <strong>Play {current_row["play_number"]}</strong><br>
+            {current_row["clock"]} | {current_row["offense"]} vs {current_row["defense"]}<br>
+            {current_row["play_description"]}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.form(f"on_field_form_{game_key}_{current_row['play_number']}"):
+        field_cols = st.columns(3)
+        qb = field_cols[0].text_input("QB", value=str(current_row["qb"]))
+        skill_1 = field_cols[1].text_input("Skill 1", value=str(current_row["skill_1"]))
+        skill_2 = field_cols[2].text_input("Skill 2", value=str(current_row["skill_2"]))
+        field_cols_2 = st.columns(3)
+        skill_3 = field_cols_2[0].text_input("Skill 3", value=str(current_row["skill_3"]))
+        skill_4 = field_cols_2[1].text_input("Skill 4", value=str(current_row["skill_4"]))
+        skill_5 = field_cols_2[2].text_input("Skill 5", value=str(current_row["skill_5"]))
+        save_clicked = st.form_submit_button("Save Play Entry", use_container_width=True)
+
+    if save_clicked:
+        updated_df = st.session_state[data_key].copy()
+        updated_df.at[current_index, "qb"] = qb.strip()
+        updated_df.at[current_index, "skill_1"] = skill_1.strip()
+        updated_df.at[current_index, "skill_2"] = skill_2.strip()
+        updated_df.at[current_index, "skill_3"] = skill_3.strip()
+        updated_df.at[current_index, "skill_4"] = skill_4.strip()
+        updated_df.at[current_index, "skill_5"] = skill_5.strip()
+        st.session_state[data_key] = updated_df
+        st.success(f"Saved on-field entries for play {current_row['play_number']}.")
+
+    completed_mask = st.session_state[data_key][ENTRY_PLAYER_COLUMNS].fillna("").apply(
+        lambda row: any(str(value).strip() for value in row),
+        axis=1,
+    )
+    completed_count = int(completed_mask.sum())
+    entry_stats = st.columns(2)
+    entry_stats[0].metric("Entry Rows", len(st.session_state[data_key]))
+    entry_stats[1].metric("Completed Plays", completed_count)
+
+    entries_output = output_name.with_name(f"{output_name.stem}_on_field_entries.csv")
+    st.download_button(
+        "Download On-Field Entries CSV",
+        data=st.session_state[data_key].to_csv(index=False),
+        file_name=entries_output.name,
+        mime="text/csv",
+        use_container_width=True,
+    )
+
+    if completed_count:
+        st.caption("Completed on-field rows so far.")
+        st.dataframe(
+            st.session_state[data_key].loc[completed_mask],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
 def resolve_roster_source(credentials_info: dict[str, str] | None) -> tuple[Path, str, str | None]:
     try:
         return write_temp_roster(credentials_info), "live_google_sheet", None
@@ -292,6 +445,7 @@ def main() -> None:
             - Play-by-play CSV in the sample schema
             - Ambiguity report for short-name collisions
             - Missing-target warnings for thrown passes
+            - Separate on-field entry CSV for QB plus five skill players
             - Live Google Sheets roster refresh on each run
             """
         )
@@ -341,7 +495,7 @@ def main() -> None:
     stats = st.columns(3)
     stats[0].metric("Rows", max(len(rows) - 1, 0))
     stats[1].metric("Ambiguity Rows", len(ambiguity_rows))
-    stats[2].metric("Files", 2)
+    stats[2].metric("Files", 3)
 
     download_cols = st.columns(2)
     with download_cols[0]:
@@ -360,6 +514,8 @@ def main() -> None:
             mime="text/csv",
             use_container_width=True,
         )
+
+    render_on_field_entry_workflow(rows, output_name)
 
     st.subheader("Player Totals")
     pass_tab, rush_tab, rec_tab = st.tabs(["Passing", "Rushing", "Receiving"])
