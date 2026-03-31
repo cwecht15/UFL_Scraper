@@ -27,6 +27,16 @@ from scrape_foxsports_ufl_pbp import (
 )
 
 ENTRY_PLAYER_COLUMNS = ["qb", "skill_1", "skill_2", "skill_3", "skill_4", "skill_5"]
+ENTRY_ROLE_COLUMNS = [f"{column}_role" for column in ENTRY_PLAYER_COLUMNS]
+ENTRY_SLOT_LABELS = {
+    "qb": "QB",
+    "skill_1": "Skill 1",
+    "skill_2": "Skill 2",
+    "skill_3": "Skill 3",
+    "skill_4": "Skill 4",
+    "skill_5": "Skill 5",
+}
+ROLE_OPTIONS = ["", "route"]
 HISTORICAL_PLAYER_DB = Path("historical_player_database.csv")
 
 
@@ -387,6 +397,8 @@ def build_on_field_entries(rows: list[dict[str, str]]) -> pd.DataFrame:
         }
         for column in ENTRY_PLAYER_COLUMNS:
             entry_row[column] = ""
+        for column in ENTRY_ROLE_COLUMNS:
+            entry_row[column] = ""
         entry_rows.append(entry_row)
 
     return pd.DataFrame(entry_rows)
@@ -466,24 +478,30 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
     )
 
     with st.form(f"on_field_form_{game_key}_{current_row['play_number']}"):
-        field_cols = st.columns(3)
-        qb = field_cols[0].selectbox("QB", player_options, index=player_option_index(player_options, str(current_row["qb"])))
-        skill_1 = field_cols[1].selectbox("Skill 1", player_options, index=player_option_index(player_options, str(current_row["skill_1"])))
-        skill_2 = field_cols[2].selectbox("Skill 2", player_options, index=player_option_index(player_options, str(current_row["skill_2"])))
-        field_cols_2 = st.columns(3)
-        skill_3 = field_cols_2[0].selectbox("Skill 3", player_options, index=player_option_index(player_options, str(current_row["skill_3"])))
-        skill_4 = field_cols_2[1].selectbox("Skill 4", player_options, index=player_option_index(player_options, str(current_row["skill_4"])))
-        skill_5 = field_cols_2[2].selectbox("Skill 5", player_options, index=player_option_index(player_options, str(current_row["skill_5"])))
+        selections: dict[str, str] = {}
+        role_selections: dict[str, str] = {}
+        for slot in ENTRY_PLAYER_COLUMNS:
+            slot_cols = st.columns([4, 1])
+            selections[slot] = slot_cols[0].selectbox(
+                ENTRY_SLOT_LABELS[slot],
+                player_options,
+                index=player_option_index(player_options, str(current_row[slot])),
+                key=f"{game_key}_{current_row['play_number']}_{slot}",
+            )
+            role_field = f"{slot}_role"
+            role_selections[slot] = slot_cols[1].selectbox(
+                "Role",
+                ROLE_OPTIONS,
+                index=player_option_index(ROLE_OPTIONS, str(current_row.get(role_field, ""))),
+                key=f"{game_key}_{current_row['play_number']}_{role_field}",
+            )
         save_clicked = st.form_submit_button("Save Play Entry", use_container_width=True)
 
     if save_clicked:
         updated_df = st.session_state[data_key].copy()
-        updated_df.at[current_index, "qb"] = qb.strip()
-        updated_df.at[current_index, "skill_1"] = skill_1.strip()
-        updated_df.at[current_index, "skill_2"] = skill_2.strip()
-        updated_df.at[current_index, "skill_3"] = skill_3.strip()
-        updated_df.at[current_index, "skill_4"] = skill_4.strip()
-        updated_df.at[current_index, "skill_5"] = skill_5.strip()
+        for slot in ENTRY_PLAYER_COLUMNS:
+            updated_df.at[current_index, slot] = selections[slot].strip()
+            updated_df.at[current_index, f"{slot}_role"] = role_selections[slot].strip()
         st.session_state[data_key] = updated_df
         st.success(f"Saved on-field entries for play {current_row['play_number']}.")
 
