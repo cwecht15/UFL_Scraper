@@ -38,6 +38,10 @@ ENTRY_SLOT_LABELS = {
 }
 ROLE_OPTIONS = ["", "route"]
 HISTORICAL_PLAYER_DB = Path("historical_player_database.csv")
+TEAM_MATCH_EQUIVALENTS = {
+    "ARL": {"ARL", "DAL"},
+    "DAL": {"DAL", "ARL"},
+}
 
 
 st.set_page_config(page_title="UFL Fox Sports PBP Exporter", page_icon="football", layout="wide")
@@ -323,6 +327,19 @@ def player_label(name: str, team_abbrev: str) -> str:
     return f"{name} ({team_abbrev})" if team_abbrev else name
 
 
+def team_match_options(team_abbrev: str) -> set[str]:
+    normalized = normalize_team_abbrev(team_abbrev)
+    if not normalized:
+        return set()
+    return TEAM_MATCH_EQUIVALENTS.get(normalized, {normalized})
+
+
+def team_from_player_label(label: str) -> str:
+    if not label or "(" not in label or not label.endswith(")"):
+        return ""
+    return normalize_team_abbrev(label.rsplit("(", 1)[1].rstrip(")").strip())
+
+
 def roster_player_records(roster_path: Path | None) -> set[tuple[str, str]]:
     records: set[tuple[str, str]] = set()
     if roster_path and roster_path.exists():
@@ -498,12 +515,30 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
         save_clicked = st.form_submit_button("Save Play Entry", use_container_width=True)
 
     if save_clicked:
-        updated_df = st.session_state[data_key].copy()
+        offense_team = normalize_team_abbrev(str(current_row.get("offense", "")).strip())
+        allowed_teams = team_match_options(offense_team)
+        invalid_entries: list[str] = []
+
         for slot in ENTRY_PLAYER_COLUMNS:
-            updated_df.at[current_index, slot] = selections[slot].strip()
-            updated_df.at[current_index, f"{slot}_role"] = role_selections[slot].strip()
-        st.session_state[data_key] = updated_df
-        st.success(f"Saved on-field entries for play {current_row['play_number']}.")
+            selected_player = selections[slot].strip()
+            if not selected_player:
+                continue
+            player_team = team_from_player_label(selected_player)
+            if not player_team or player_team not in allowed_teams:
+                invalid_entries.append(f"{ENTRY_SLOT_LABELS[slot]}: {selected_player}")
+
+        if invalid_entries:
+            st.error(
+                "Could not save play entry. These players do not match the offense on the field "
+                f"({offense_team}): " + "; ".join(invalid_entries)
+            )
+        else:
+            updated_df = st.session_state[data_key].copy()
+            for slot in ENTRY_PLAYER_COLUMNS:
+                updated_df.at[current_index, slot] = selections[slot].strip()
+                updated_df.at[current_index, f"{slot}_role"] = role_selections[slot].strip()
+            st.session_state[data_key] = updated_df
+            st.success(f"Saved on-field entries for play {current_row['play_number']}.")
 
     completed_mask = st.session_state[data_key][ENTRY_PLAYER_COLUMNS].fillna("").apply(
         lambda row: any(str(value).strip() for value in row),
