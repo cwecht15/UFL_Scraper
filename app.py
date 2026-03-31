@@ -23,6 +23,7 @@ from scrape_foxsports_ufl_pbp import (
     csv_text,
     default_output_path,
     extract_rows,
+    normalize_team_abbrev,
 )
 
 ENTRY_PLAYER_COLUMNS = ["qb", "skill_1", "skill_2", "skill_3", "skill_4", "skill_5"]
@@ -308,47 +309,52 @@ def aggregate_player_stats(rows: list[dict[str, str]]) -> tuple[list[dict[str, i
     return passing_rows, rushing_rows, receiving_rows
 
 
-def roster_player_names(roster_path: Path | None) -> set[str]:
-    names: set[str] = set()
+def player_label(name: str, team_abbrev: str) -> str:
+    return f"{name} ({team_abbrev})" if team_abbrev else name
+
+
+def roster_player_records(roster_path: Path | None) -> set[tuple[str, str]]:
+    records: set[tuple[str, str]] = set()
     if roster_path and roster_path.exists():
         with roster_path.open(newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             for row in reader:
-                if row and row[0].strip():
-                    names.add(row[0].strip())
-    return names
+                if len(row) >= 2 and row[0].strip():
+                    records.add((row[0].strip(), normalize_team_abbrev(row[1].strip())))
+    return records
 
 
-def load_historical_player_names() -> set[str]:
-    names: set[str] = set()
+def load_historical_player_records() -> set[tuple[str, str]]:
+    records: set[tuple[str, str]] = set()
     if not HISTORICAL_PLAYER_DB.exists():
-        return names
+        return records
 
     with HISTORICAL_PLAYER_DB.open(newline="", encoding="utf-8") as handle:
-        reader = csv.reader(handle)
+        reader = csv.DictReader(handle)
         for row in reader:
             if not row:
                 continue
-            first_value = row[0].strip()
-            if not first_value or first_value == "player_name":
+            name = (row.get("player_name") or "").strip()
+            team = normalize_team_abbrev((row.get("team_abbrev") or "").strip())
+            if not name:
                 continue
-            names.add(first_value)
-    return names
+            records.add((name, team))
+    return records
 
 
 def sync_player_dropdown_options(roster_path: Path | None) -> list[str]:
-    historical_names = load_historical_player_names()
-    current_names = roster_player_names(roster_path)
-    merged_names = historical_names | current_names
+    historical_records = load_historical_player_records()
+    current_records = roster_player_records(roster_path)
+    merged_records = historical_records | current_records
 
-    if merged_names and (merged_names != historical_names or not HISTORICAL_PLAYER_DB.exists()):
+    if merged_records and (merged_records != historical_records or not HISTORICAL_PLAYER_DB.exists()):
         with HISTORICAL_PLAYER_DB.open("w", newline="", encoding="utf-8") as handle:
             writer = csv.writer(handle)
-            writer.writerow(["player_name"])
-            for player_name in sorted(merged_names):
-                writer.writerow([player_name])
+            writer.writerow(["player_name", "team_abbrev", "player_label"])
+            for player_name, team_abbrev in sorted(merged_records):
+                writer.writerow([player_name, team_abbrev, player_label(player_name, team_abbrev)])
 
-    return [""] + sorted(merged_names)
+    return [""] + [player_label(player_name, team_abbrev) for player_name, team_abbrev in sorted(merged_records)]
 
 
 def play_clock_label(row: dict[str, str]) -> str:
