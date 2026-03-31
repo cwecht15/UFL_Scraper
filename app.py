@@ -463,25 +463,19 @@ def apply_previous_play_defaults(entry_df: pd.DataFrame) -> pd.DataFrame:
     return updated_df
 
 
-def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[str, str, str, pd.DataFrame]:
+def ensure_on_field_state(game_key: str, rows: list[dict[str, str]]) -> tuple[str, str, pd.DataFrame]:
     data_key = f"on_field_entries::{game_key}"
     index_key = f"on_field_index::{game_key}"
-    picker_key = f"play_picker_{game_key}"
     built_key = f"on_field_built::{game_key}"
     built_df = build_on_field_entries(rows)
 
     if built_key not in st.session_state or st.session_state[built_key] != f"{game_key}:{len(built_df)}":
         st.session_state[data_key] = built_df
         st.session_state[index_key] = 0
-        st.session_state[picker_key] = 0
         st.session_state[built_key] = f"{game_key}:{len(built_df)}"
 
     st.session_state[data_key] = apply_previous_play_defaults(st.session_state[data_key])
-    return data_key, index_key, picker_key, st.session_state[data_key]
-
-
-def sync_on_field_index_from_picker(index_key: str, picker_key: str) -> None:
-    st.session_state[index_key] = int(st.session_state[picker_key])
+    return data_key, index_key, st.session_state[data_key]
 
 
 def player_option_index(player_options: list[str], current_value: str) -> int:
@@ -496,7 +490,7 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
     st.caption("Step through each play and enter the QB plus five skill players. Download this as a separate CSV you can join back to the play-by-play export.")
 
     game_key = output_name.stem
-    data_key, index_key, picker_key, entry_df = ensure_on_field_state(game_key, rows)
+    data_key, index_key, entry_df = ensure_on_field_state(game_key, rows)
     if entry_df.empty:
         st.info("No play rows are available for manual on-field entry.")
         return
@@ -510,19 +504,17 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
         if st.button("Previous Play", use_container_width=True, disabled=current_index == 0, key=f"prev_play_{game_key}"):
             next_index = max(current_index - 1, 0)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
     with nav_cols[1]:
-        if picker_key not in st.session_state:
-            st.session_state[picker_key] = current_index
-        st.selectbox(
+        selected_index = st.selectbox(
             "Jump to play",
             options=list(range(len(entry_df))),
+            index=current_index,
             format_func=lambda idx: f"Play {entry_df.iloc[idx]['play_number']} | {entry_df.iloc[idx]['clock']} | {entry_df.iloc[idx]['offense']} | {entry_df.iloc[idx]['play_description'][:90]}",
-            key=picker_key,
-            on_change=sync_on_field_index_from_picker,
-            args=(index_key, picker_key),
         )
+        if selected_index != current_index:
+            st.session_state[index_key] = selected_index
+            st.rerun()
     with nav_cols[2]:
         if st.button(
             "Next Play",
@@ -532,7 +524,6 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
         ):
             next_index = min(current_index + 1, len(entry_df) - 1)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
 
     current_row = st.session_state[data_key].iloc[current_index].to_dict()
@@ -593,7 +584,6 @@ def render_on_field_entry_workflow(rows: list[dict[str, str]], output_name: Path
             st.session_state[data_key] = updated_df
             next_index = min(current_index + 1, len(entry_df) - 1)
             st.session_state[index_key] = next_index
-            st.session_state[picker_key] = next_index
             st.rerun()
 
     completed_mask = st.session_state[data_key][ENTRY_PLAYER_COLUMNS].fillna("").apply(
