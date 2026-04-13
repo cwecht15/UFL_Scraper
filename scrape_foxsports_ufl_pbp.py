@@ -913,6 +913,8 @@ def is_try_play(row: dict[str, str]) -> bool:
 
 
 def score_team_for_play(row: dict[str, str], drive_team: str, home_team: str, away_team: str) -> str:
+    if is_try_play(row):
+        return row.get("offense", "") or row.get("kicking_team", "") or drive_team
     if row.get("kickoff") == "1" and row.get("kick_return_touchdown") == "1":
         return row.get("receiving_team", "")
     if row.get("punt_return_touchdown") == "1":
