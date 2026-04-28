@@ -834,8 +834,17 @@ def parse_run(row: dict[str, str], description: str) -> bool:
     if not match:
         return False
 
+    is_scramble = bool(scramble_match)
+
     if "run_play" in row:
-        row["run_play"] = "1"
+        row["run_play"] = "0" if is_scramble else "1"
+    if is_scramble:
+        if "pass_play" in row:
+            row["pass_play"] = "1"
+        if "dropback" in row:
+            row["dropback"] = "1"
+        if "passer" in row:
+            row["passer"] = match.group("runner")
     if "rush_attempt" in row:
         row["rush_attempt"] = "1"
     if "rusher" in row:

@@ -1,0 +1,15 @@
+issue_type,play_number,quarter,minutes,seconds,player_field,short_player,team,candidates,play_description
+ambiguous_player_id,11,1,11,40,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral pass short left complete. Catch made by J.Ross for 10 yards. Tackled by A.Thomas; N.Clarke at BHM 47.
+ambiguous_player_id,14,1,10,2,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete short right intended for J.Ross.
+ambiguous_player_id,73,2,1,51,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete deep left intended for J.Ross (N.Clarke).
+ambiguous_player_id,75,2,1,41,receiver,J.Ross,BHM,John Ross | Justyn Ross,"M.Corral pass short left complete. Catch made by J.Ross for 6 yards. Tackled by N.Clarke, S.Fresch at BHM 46."
+ambiguous_player_id,88,3,12,46,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete short left intended for J.Ross [C.Davis].
+ambiguous_player_id,89,3,12,14,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete short right intended for J.Ross (M.Sims).
+ambiguous_player_id,99,3,9,27,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral pass short right complete. Catch made by J.Ross for 7 yards. Tackled by M.Ojemudia at STL 30.
+ambiguous_player_id,102,3,7,42,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete short right intended for J.Ross (J.Mosley).
+ambiguous_player_id,115,3,3,19,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral pass short right complete. Catch made by J.Ross for 13 yards. Pushed out of bounds by J.Mosley; J.Williams at BHM 26.
+ambiguous_player_id,119,3,1,21,receiver,J.Ross,BHM,John Ross | Justyn Ross,"M.Corral pass short left complete. Catch made by J.Ross for 5 yards. Tackled by D.Isom, C.Davis at BHM 25."
+ambiguous_player_id,128,4,13,52,kick_returner,J.Ross,BHM,John Ross | Justyn Ross,R.Sanborn kicks 69 yards from STL 30 to the BHM 1. J.Ross returns the kickoff. Tackled by R.Sanborn at BHM 20.
+ambiguous_player_id,140,4,10,36,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral pass deep left complete. Catch made by J.Ross for 17 yards. Pushed out of bounds by M.Ojemudia at BHM 49.
+ambiguous_player_id,162,4,1,27,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete short right intended for J.Ross.
+ambiguous_player_id,164,4,1,18,receiver,J.Ross,BHM,John Ross | Justyn Ross,M.Corral steps back to pass. Pass incomplete deep right intended for J.Ross.
