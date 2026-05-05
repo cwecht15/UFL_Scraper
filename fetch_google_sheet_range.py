@@ -19,7 +19,7 @@ DEFAULT_SCOPES = [
 ]
 ROSTER_SHEET_ID = "1KUVJ_FhXFqze92Nn6Q4PGyohI4rcMHYr2FhqFmW7SfQ"
 ROSTER_TAB_NAME = "Roster Info"
-ROSTER_RANGE = "B3:D650"
+ROSTER_RANGE = "B3:D1000"
 
 
 def extract_sheet_id(value: str) -> str:

@@ -4,6 +4,8 @@ import argparse
 import csv
 import json
 import re
+import sys
+import tempfile
 from io import StringIO
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,13 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+from fetch_google_sheet_range import (
+    ROSTER_RANGE,
+    ROSTER_SHEET_ID,
+    ROSTER_TAB_NAME,
+    fetch_range_csv_text,
+)
 
 
 DEFAULT_TEMPLATE = Path("Sample CSV.csv")
@@ -1330,16 +1339,43 @@ def write_ambiguity_report(rows: list[dict[str, str]], output_path: Path) -> Non
         writer.writerows(rows)
 
 
+def fetch_live_roster_to_tempfile() -> Path:
+    roster_csv = fetch_range_csv_text(ROSTER_SHEET_ID, ROSTER_TAB_NAME, ROSTER_RANGE)
+    handle = tempfile.NamedTemporaryFile(
+        "w", newline="", encoding="utf-8", suffix=".csv", delete=False
+    )
+    with handle:
+        handle.write(roster_csv)
+    return Path(handle.name)
+
+
+def resolve_roster_path(fallback: Path | None) -> tuple[Path | None, bool]:
+    try:
+        return fetch_live_roster_to_tempfile(), True
+    except Exception as exc:  # noqa: BLE001
+        print(f"Live roster fetch failed ({exc}); falling back to {fallback}.", file=sys.stderr)
+        return fallback, False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scrape UFL play-by-play data from a Fox Sports game page.")
     parser.add_argument("url", help="Fox Sports UFL game URL")
     parser.add_argument("--output", type=Path, default=None, help="Output CSV path")
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE, help="Template CSV used for header order")
-    parser.add_argument("--roster", type=Path, default=DEFAULT_ROSTER, help="Roster CSV used to backfill player full names from short ids")
+    parser.add_argument("--roster", type=Path, default=DEFAULT_ROSTER, help="Fallback roster CSV used if the live Google Sheet fetch fails")
     args = parser.parse_args()
 
     output_path = args.output or default_output_path(args.url)
-    headers, rows, ambiguity_rows = extract_rows(args.url, args.template, args.roster)
+    roster_path, is_temp = resolve_roster_path(args.roster)
+    if is_temp:
+        print("Using live roster from Google Sheet.")
+    else:
+        print(f"Using fallback roster {roster_path}.")
+    try:
+        headers, rows, ambiguity_rows = extract_rows(args.url, args.template, roster_path)
+    finally:
+        if is_temp and roster_path is not None:
+            roster_path.unlink(missing_ok=True)
     write_csv(headers, rows, output_path)
     report_path = ambiguity_report_path(output_path)
     write_ambiguity_report(ambiguity_rows, report_path)
